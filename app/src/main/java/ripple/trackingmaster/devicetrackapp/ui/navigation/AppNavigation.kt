@@ -49,9 +49,18 @@ fun AppNavigation() {
             )
         }
 
+//        composable("device/{mac}") { backStack ->
+//            val mac = backStack.arguments?.getString("mac") ?: ""
+//            DeviceDetailScreen(mac = mac)
+//        }
+
         composable("device/{mac}") { backStack ->
             val mac = backStack.arguments?.getString("mac") ?: ""
-            DeviceDetailScreen(mac = mac)
+            // ✅ PASS THE NAVCONTROLLER HERE
+            DeviceDetailScreen(
+                mac = mac,
+                navController = nav
+            )
         }
 
         composable("sites") {

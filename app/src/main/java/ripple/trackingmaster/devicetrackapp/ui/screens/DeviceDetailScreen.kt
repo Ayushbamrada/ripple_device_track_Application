@@ -1,129 +1,3 @@
-//@file:OptIn(ExperimentalMaterial3Api::class)
-//
-//package ripple.trackingmaster.devicetrackapp.ui.screens
-//
-//import androidx.compose.foundation.clickable
-//import androidx.compose.foundation.layout.*
-//import androidx.compose.foundation.lazy.LazyColumn
-//import androidx.compose.material3.*
-//import androidx.compose.runtime.*
-//import androidx.compose.ui.Alignment
-//import androidx.compose.ui.Modifier
-//import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel
-//import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
-//
-//@Composable
-//fun DeviceDetailScreen(
-//    mac: String,
-//    vm: DeviceDetailViewModel = hiltViewModel()
-//) {
-//    LaunchedEffect(mac) { vm.init(mac) }
-//
-//    val state by vm.uiState.collectAsState()
-//    val sites by vm.sites.collectAsState()
-//
-//    var showAssignSheet by remember { mutableStateOf(false) }
-//
-//    Scaffold(
-//        topBar = { CenterAlignedTopAppBar(title = { Text("Device Details") }) }
-//    ) { padding ->
-//
-//        Column(
-//            modifier = Modifier
-//                .padding(padding)
-//                .padding(24.dp)
-//                .fillMaxSize(),
-//            horizontalAlignment = Alignment.Start
-//        ) {
-//
-//            Text("MAC: ${state.mac}", style = MaterialTheme.typography.titleMedium)
-//
-//            Spacer(Modifier.height(20.dp))
-//
-//            if (!state.isConnected) {
-//                Button(
-//                    onClick = vm::connect,
-//                    modifier = Modifier.fillMaxWidth()
-//                ) { Text(if (state.isConnecting) "Connecting..." else "Connect") }
-//            } else {
-//                Button(
-//                    onClick = vm::disconnect,
-//                    modifier = Modifier.fillMaxWidth(),
-//                    colors = ButtonDefaults.buttonColors(
-//                        containerColor = MaterialTheme.colorScheme.error
-//                    )
-//                ) { Text("Disconnect") }
-//
-//                Spacer(Modifier.height(20.dp))
-//
-//                Text("Live Sensor Data:", style = MaterialTheme.typography.titleMedium)
-//                Spacer(Modifier.height(10.dp))
-//                Text("Left Pitch: ${state.lPitch ?: "--"}°")
-//                Text("Right Pitch: ${state.rPitch ?: "--"}°")
-//                Text("Center Pitch: ${state.cPitch ?: "--"}°")
-//            }
-//
-//            Spacer(Modifier.height(32.dp))
-//
-//            Button(
-//                onClick = { showAssignSheet = true },
-//                modifier = Modifier.fillMaxWidth()
-//            ) { Text("Assign to Site") }
-//
-//            if (showAssignSheet) {
-//                AssignSiteSheet(
-//                    sites = sites,
-//                    onSelect = { selectedSiteId ->
-//                        vm.assignToSite(selectedSiteId)
-//                        showAssignSheet = false
-//                    },
-//                    onDismiss = { showAssignSheet = false }
-//                )
-//            }
-//        }
-//    }
-//}
-//
-//@Composable
-//private fun AssignSiteSheet(
-//    sites: List<SiteEntity>,
-//    onSelect: (Int) -> Unit,
-//    onDismiss: () -> Unit
-//) {
-//    ModalBottomSheet(onDismissRequest = onDismiss) {
-//        Column(Modifier.padding(16.dp)) {
-//            Text("Assign to Site", style = MaterialTheme.typography.titleLarge)
-//            Spacer(Modifier.height(16.dp))
-//
-//            if (sites.isEmpty()) {
-//                Text("No sites yet. Create one from Dashboard → Site Management.")
-//                Spacer(Modifier.height(12.dp))
-//            } else {
-//                LazyColumn {
-//                    items(sites.size) { idx ->
-//                        val site = sites[idx]
-//                        Card(
-//                            Modifier
-//                                .fillMaxWidth()
-//                                .padding(vertical = 6.dp)
-//                                .clickable { onSelect(site.id) }
-//                        ) {
-//                            Column(Modifier.padding(16.dp)) {
-//                                Text(site.siteName, style = MaterialTheme.typography.titleMedium)
-//                                site.location?.let {
-//                                    Text(it, style = MaterialTheme.typography.bodySmall)
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//
-//            Spacer(Modifier.height(16.dp))
-//        }
-//    }
-//}
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -131,7 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -139,19 +15,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
+import ripple.trackingmaster.devicetrackapp.domain.model.ConnectionState
+import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class) // Needed for ModalBottomSheet
 @Composable
 fun DeviceDetailScreen(
     mac: String,
+    navController: NavController, // ✅ NEW: Get NavController
     vm: DeviceDetailViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(Unit) { vm.init(mac) }
-
     val state by vm.uiState.collectAsState()
     val sites by vm.sites.collectAsState()
+    val connState by vm.connectionState.collectAsState()
+
+    // ✅ NEW: Get new states from VM
+    val saveButtonText by vm.saveButtonText.collectAsState()
+    val assignedSiteId by vm.assignedSiteId.collectAsState()
 
     var showSheet by remember { mutableStateOf(false) }
 
@@ -159,53 +44,133 @@ fun DeviceDetailScreen(
         topBar = { CenterAlignedTopAppBar(title = { Text("Device Details") }) }
     ) { padding ->
 
-        Column(
+        LazyColumn(
             Modifier
                 .padding(padding)
                 .padding(20.dp)
                 .fillMaxSize()
         ) {
 
-            // Header
-            DeviceHeaderSection(state)
-
-            Spacer(Modifier.height(20.dp))
-
-            // Connect/Disconnect
-            ConnectionButtons(state, vm)
-
-            Spacer(Modifier.height(30.dp))
-
-            // Live sensor only when connected
-            if (state.isConnected) {
-                LiveSensorSection(state)
+            item {
+                DeviceHeaderSection(state, connState)
+                Spacer(Modifier.height(20.dp))
             }
 
-            Spacer(Modifier.height(40.dp))
-
-            // Assign
-            Button(
-                onClick = { showSheet = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-            ) { Text("Assign to Site") }
-
-            if (showSheet) {
-                AssignSiteSheet(
-                    sites = sites,
-                    onSelect = { siteId ->
-                        vm.assignToSite(siteId)
-                        showSheet = false
-                    },
-                    onDismiss = { showSheet = false }
+            item {
+                OutlinedTextField(
+                    value = state.customName ?: "",
+                    onValueChange = { vm.updateName(it) },
+                    label = { Text("Device Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
                 )
             }
+
+            item {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = state.beltNumber?.toString() ?: "",
+                    onValueChange = { vm.updateBeltNumber(it) },
+                    label = { Text("Belt Number") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = state.beltSize ?: "",
+                    onValueChange = { vm.updateBeltSize(it) },
+                    label = { Text("Belt Size") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+
+                // ✅ UPDATED SAVE BUTTON
+                Button(
+                    onClick = { vm.saveDeviceDetails() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    // Disable button when saving/saved
+                    enabled = saveButtonText == "Save Details",
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (saveButtonText == "Saved!") {
+                            Color(0xFF4CAF50) // Green color
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
+                    )
+                ) {
+                    Text(saveButtonText)
+                    if (saveButtonText == "Saved!") {
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Filled.Check, contentDescription = "Saved")
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                ConnectionButtons(connState, vm)
+                Spacer(Modifier.height(30.dp))
+            }
+
+            item {
+                // ✅ UPDATED ASSIGN BUTTON
+                val assignedSite = sites.find { it.id == assignedSiteId }
+                Button(
+                    onClick = { showSheet = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (assignedSite != null) {
+                            Color(0xFF4CAF50) // Green
+                        } else {
+                            MaterialTheme.colorScheme.secondary
+                        }
+                    )
+                ) {
+                    if (assignedSite != null) {
+                        Icon(Icons.Filled.Check, contentDescription = "Assigned")
+                        Spacer(Modifier.width(8.dp))
+                        Text("Assigned to: ${assignedSite.siteName}")
+                    } else {
+                        Text("Assign to Site")
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        } // <-- END OF LAZYCOLUMN
+
+        if (showSheet) {
+            // ✅ PASS ALL NEW PARAMETERS TO THE SHEET
+            AssignSiteSheet(
+                sites = sites,
+                assignedSiteId = assignedSiteId,
+                onSelect = { siteId ->
+                    vm.assignToSite(siteId)
+                    showSheet = false
+                },
+                onUnassign = {
+                    vm.unassignFromSite()
+                    showSheet = false
+                },
+                onCreateNew = {
+                    showSheet = false
+                    navController.navigate("createSite")
+                },
+                onDismiss = { showSheet = false }
+            )
         }
-    }
+    } // <-- END OF SCAFFOLD
 }
 
 @Composable
-private fun DeviceHeaderSection(state: DeviceDetailUiState) {
+fun DeviceHeaderSection(state: DeviceDetailUiState, connState: ConnectionState) {
+    // (This composable is unchanged)
     Card(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -213,27 +178,31 @@ private fun DeviceHeaderSection(state: DeviceDetailUiState) {
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(
-                "HipPro Belt",
+                "HipPro Belt Details",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
             )
+            Text("Serial No: ${state.serialNumber ?: "--"}", style = MaterialTheme.typography.bodyMedium)
             Text("MAC: ${state.mac}", style = MaterialTheme.typography.bodyMedium)
+            Text("Last Seen: ${state.lastSeenStatus ?: "--"}", style = MaterialTheme.typography.bodyMedium)
 
             Spacer(Modifier.height(10.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val isConnected = connState == ConnectionState.CONNECTED
                 Icon(
                     imageVector = Icons.Filled.Wifi,
                     contentDescription = null,
-                    tint = if (state.isConnected) Color(0xFF4CAF50) else Color.Red
+                    tint = if (isConnected) Color(0xFF4CAF50) else Color.Red
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    when {
-                        state.isConnected -> "Connected"
-                        state.isConnecting -> "Connecting…"
-                        else -> "Disconnected"
+                    when (connState) {
+                        ConnectionState.CONNECTED -> "Connected"
+                        ConnectionState.CONNECTING -> "Connecting…"
+                        ConnectionState.FAILED -> "Failed"
+                        ConnectionState.DISCONNECTED -> "Disconnected"
                     },
-                    color = if (state.isConnected) Color(0xFF4CAF50) else Color.Red
+                    color = if (isConnected) Color(0xFF4CAF50) else Color.Red
                 )
             }
         }
@@ -241,17 +210,18 @@ private fun DeviceHeaderSection(state: DeviceDetailUiState) {
 }
 
 @Composable
-private fun ConnectionButtons(
-    state: DeviceDetailUiState,
+fun ConnectionButtons(
+    connState: ConnectionState,
     vm: DeviceDetailViewModel
 ) {
-    if (!state.isConnected) {
+    // (This composable is unchanged)
+    if (connState != ConnectionState.CONNECTED) {
         Button(
             onClick = vm::connect,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !state.isConnecting
+            enabled = (connState != ConnectionState.CONNECTING)
         ) {
-            if (state.isConnecting) {
+            if (connState == ConnectionState.CONNECTING) {
                 CircularProgressIndicator(
                     color = Color.White,
                     modifier = Modifier.size(20.dp),
@@ -276,75 +246,93 @@ private fun ConnectionButtons(
     }
 }
 
-@Composable
-private fun LiveSensorSection(state: DeviceDetailUiState) {
-    Text("Live Sensor Data", style = MaterialTheme.typography.titleMedium)
-
-    Spacer(Modifier.height(16.dp))
-
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        SensorCard("Left Pitch", state.lPitch)
-        SensorCard("Right Pitch", state.rPitch)
-        SensorCard("Center Pitch", state.cPitch)
-    }
-}
-
-@Composable
-private fun SensorCard(label: String, value: Float?) {
-    Card(
-        Modifier.size(width = 110.dp, height = 80.dp),
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(4.dp)
-    ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                value?.let { "%.1f°".format(it) } ?: "--",
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
-    }
-}
-
+// ✅ NEW, FULLY UPDATED BOTTOM SHEET COMPOSABLE
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssignSiteSheet(
     sites: List<SiteEntity>,
+    assignedSiteId: Int?,
     onSelect: (Int) -> Unit,
+    onUnassign: () -> Unit,
+    onCreateNew: () -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(20.dp)) {
+        Column(
+            Modifier
+                .padding(20.dp)
+                .navigationBarsPadding() // Add padding for gesture nav
+        ) {
             Text("Assign to Site", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(20.dp))
 
-            LazyColumn {
-                items(sites.size) { idx ->
-                    val site = sites[idx]
-                    Card(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                            .clickable { onSelect(site.id) },
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(site.siteName, style = MaterialTheme.typography.titleMedium)
-                            site.location?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            // --- Check if site list is empty ---
+            if (sites.isEmpty()) {
+                Text(
+                    "No sites found. Create a new site to assign this device.",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+                Button(
+                    onClick = onCreateNew,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Create New Site")
+                }
+            } else {
+                // --- Show list of sites ---
+                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                    items(sites.size) { idx ->
+                        val site = sites[idx]
+                        val isAssigned = site.id == assignedSiteId
+
+                        Card(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                                .clickable { onSelect(site.id) },
+                            shape = RoundedCornerShape(16.dp),
+                            // Highlight the assigned site
+                            colors = if (isAssigned) {
+                                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            } else {
+                                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(site.siteName, style = MaterialTheme.typography.titleMedium)
+                                    site.location?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                if (isAssigned) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = "Assigned",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
 
+                // --- Show Unassign button if a site is assigned ---
+                if (assignedSiteId != null) {
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = onUnassign,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Unassign Device")
+                    }
+                }
+            }
             Spacer(Modifier.height(20.dp))
         }
     }

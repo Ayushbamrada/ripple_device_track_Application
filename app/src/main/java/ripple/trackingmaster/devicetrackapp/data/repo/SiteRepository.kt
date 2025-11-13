@@ -30,4 +30,7 @@ class SiteRepository @Inject constructor(
     suspend fun unassignDevice(mac: String) {
         assignDao.unassignDevice(mac)
     }
+    // ✅ ADD THIS NEW FUNCTION
+    fun observeSiteIdForDevice(mac: String): Flow<Int?> =
+        assignDao.observeSiteIdForDevice(mac)
 }

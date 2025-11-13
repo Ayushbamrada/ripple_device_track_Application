@@ -15,7 +15,7 @@ import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceAssignmentEn
         SiteEntity::class,
         DeviceAssignmentEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

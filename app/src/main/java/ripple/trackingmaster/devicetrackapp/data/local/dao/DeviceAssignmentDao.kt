@@ -21,4 +21,8 @@ interface DeviceAssignmentDao {
 
     @Query("DELETE FROM device_assignments WHERE mac = :mac")
     suspend fun unassignDevice(mac: String)
+
+    // ✅ ADD THIS NEW FUNCTION
+    @Query("SELECT siteId FROM device_assignments WHERE mac = :mac LIMIT 1")
+    fun observeSiteIdForDevice(mac: String): Flow<Int?>
 }

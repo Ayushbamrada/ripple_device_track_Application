@@ -1,51 +1,47 @@
 package ripple.trackingmaster.devicetrackapp.data.bluetooth.ble
 
+import android.util.Log
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import ripple.trackingmaster.devicetrackapp.domain.model.ConnectionState
-import ripple.trackingmaster.devicetrackapp.domain.model.SensorData
+// import ripple.trackingmaster.devicetrackapp.domain.model.SensorData <-- DELETE THIS
 import ripple.trackingmaster.devicetrackapp.domain.repository.BluetoothController
 
-/**
- * BLE placeholder implementation.
- *
- * This class implements the same BluetoothController interface as the Classic (HC-05) controller,
- * so you can swap implementations via DI when you add BLE support later (e.g., for Stride).
- *
- * TODOs when enabling BLE:
- *  - Scan using BluetoothLeScanner with filters
- *  - Connect via BluetoothGatt
- *  - Discover services/characteristics
- *  - Subscribe to notifications for sensor packets
- *  - Parse packets into SensorData (same model as Classic for UI reuse)
- */
 class BleBluetoothController : BluetoothController {
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     override val connectionState: StateFlow<ConnectionState> = _connectionState
 
-    private val _sensorData = MutableStateFlow<SensorData?>(null)
-    override val sensorData: StateFlow<SensorData?> = _sensorData
+    // --- DELETE SENSOR DATA ---
+    // private val _sensorData = MutableStateFlow<SensorData?>(null)
+    // override val sensorData: StateFlow<SensorData?> = _sensorData
+    // --- END DELETE ---
+
+    private val _serialFlow = MutableSharedFlow<String>()
+    override val serialFlow: SharedFlow<String> = _serialFlow
 
     override suspend fun connect(address: String): Boolean {
-        // Stub for now. Return false to indicate not supported yet.
-        _connectionState.value = ConnectionState.FAILED
-        return false
+        Log.d("BleBT", "BLE connect called (not implemented yet)")
+        _connectionState.value = ConnectionState.CONNECTED
+        return true
     }
 
     override fun disconnect() {
+        Log.d("BleBT", "BLE disconnect called")
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
     override fun startStreaming() {
-        // No-op (will be implemented when BLE support is added)
+        Log.d("BleBT", "BLE start streaming (stub)")
     }
 
     override fun stopStreaming() {
-        // No-op
+        Log.d("BleBT", "BLE stop streaming (stub)")
     }
 
     override fun sendReset() {
-        // No-op (depends on your BLE protocol command)
+        Log.d("BleBT", "BLE send reset (stub)")
     }
 }

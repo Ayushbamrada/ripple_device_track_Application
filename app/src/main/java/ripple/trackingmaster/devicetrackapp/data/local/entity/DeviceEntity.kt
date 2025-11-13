@@ -5,24 +5,15 @@ import androidx.room.PrimaryKey
 
 /**
  * Represents one physical HipPro belt device.
- *
- * MAC is primary key because:
- *  🔹 HC-05 always exposes fixed MAC
- *  🔹 Easy to reference
- *  🔹 Backend can map Serial ↔ MAC later
+ * Stored locally in Room DB.
  */
 @Entity(tableName = "devices")
 data class DeviceEntity(
-    @PrimaryKey
-    val mac: String,
-
-    val name: String? = null,
-    val serial: String? = null,
-
-    // Last time we connected or scanned the device
-    val lastSeen: Long = System.currentTimeMillis(),
-
-    // Optional future: site assignment or status
-    val site: String? = null,
-    val status: String? = "unassigned"
+    @PrimaryKey val mac: String,           // Unique MAC address
+    val serialNumber: String? = null,      // Belt’s serial number
+    val customName: String? = null,        // Editable display name (e.g., "Hip-Pro 1")
+    val beltNumber: String? = null,           // Optional user-assigned number
+    val beltSize: String? = null,          // Optional size label
+    val lastSeenStatus: String? = null,    // "Connected", "Disconnected", etc.
+    val createdAt: Long = System.currentTimeMillis()
 )
