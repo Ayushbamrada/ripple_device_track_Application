@@ -1,339 +1,324 @@
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
 import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
 import ripple.trackingmaster.devicetrackapp.domain.model.ConnectionState
-import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class) // Needed for ModalBottomSheet
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceDetailScreen(
-    mac: String,
-    navController: NavController, // ✅ NEW: Get NavController
     vm: DeviceDetailViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
-    val sites by vm.sites.collectAsState()
-    val connState by vm.connectionState.collectAsState()
+    var showSiteSheet by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // ✅ NEW: Get new states from VM
-    val saveButtonText by vm.saveButtonText.collectAsState()
-    val assignedSiteId by vm.assignedSiteId.collectAsState()
-
-    var showSheet by remember { mutableStateOf(false) }
+    // Listen for Save/Error Messages
+    LaunchedEffect(state.saveMessage, state.errorMessage) {
+        if (state.saveMessage != null) {
+            snackbarHostState.showSnackbar(state.saveMessage!!)
+            vm.clearMessages()
+        }
+        if (state.errorMessage != null) {
+            snackbarHostState.showSnackbar(state.errorMessage!!)
+            vm.clearMessages()
+        }
+    }
 
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("Device Details") }) }
+        topBar = {
+            CenterAlignedTopAppBar(title = { Text("Device Tracker") })
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-
         LazyColumn(
-            Modifier
+            modifier = Modifier
                 .padding(padding)
-                .padding(20.dp)
-                .fillMaxSize()
+                .padding(16.dp)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
+            // --- 1. STATUS CARD ---
             item {
-                DeviceHeaderSection(state, connState)
-                Spacer(Modifier.height(20.dp))
+                DeviceStatusCard(state = state, onGetSerial = { vm.fetchSerialNumber() })
             }
 
+            // --- 2. DETAILS FORM ---
             item {
-                OutlinedTextField(
-                    value = state.customName ?: "",
-                    onValueChange = { vm.updateName(it) },
-                    label = { Text("Device Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                Text(
+                    "Configuration",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 8.dp)
                 )
-            }
 
-            item {
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = state.beltNumber?.toString() ?: "",
-                    onValueChange = { vm.updateBeltNumber(it) },
-                    label = { Text("Belt Number") },
-                    modifier = Modifier.fillMaxWidth()
+                // ✅ Team Member DROPDOWN
+                TeamMemberDropdown(
+                    options = state.teamMemberOptions,
+                    selectedOption = state.teamMember,
+                    onOptionSelected = { vm.updateTeamMember(it) }
                 )
-            }
 
-            item {
-                Spacer(Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Belt Size Input
                 OutlinedTextField(
-                    value = state.beltSize ?: "",
+                    value = state.beltSize,
                     onValueChange = { vm.updateBeltSize(it) },
                     label = { Text("Belt Size") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            item {
-                Spacer(Modifier.height(16.dp))
-
-                // ✅ UPDATED SAVE BUTTON
-                Button(
-                    onClick = { vm.saveDeviceDetails() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    // Disable button when saving/saved
-                    enabled = saveButtonText == "Save Details",
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (saveButtonText == "Saved!") {
-                            Color(0xFF4CAF50) // Green color
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        }
-                    )
-                ) {
-                    Text(saveButtonText)
-                    if (saveButtonText == "Saved!") {
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Filled.Check, contentDescription = "Saved")
-                    }
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(16.dp))
-                ConnectionButtons(connState, vm)
-                Spacer(Modifier.height(30.dp))
-            }
-
-            item {
-                // ✅ UPDATED ASSIGN BUTTON
-                val assignedSite = sites.find { it.id == assignedSiteId }
-                Button(
-                    onClick = { showSheet = true },
+                    leadingIcon = { Icon(Icons.Default.Straighten, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (assignedSite != null) {
-                            Color(0xFF4CAF50) // Green
-                        } else {
-                            MaterialTheme.colorScheme.secondary
-                        }
-                    )
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            // --- 3. SITE ASSIGNMENT ---
+            item {
+                SiteAssignmentCard(
+                    assignedSiteName = state.assignedSite?.siteName,
+                    onClick = { showSiteSheet = true }
+                )
+            }
+
+            // --- 4. ACTION BUTTONS ---
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = { vm.saveDetails() },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !state.isSaving
                 ) {
-                    if (assignedSite != null) {
-                        Icon(Icons.Filled.Check, contentDescription = "Assigned")
-                        Spacer(Modifier.width(8.dp))
-                        Text("Assigned to: ${assignedSite.siteName}")
+                    if (state.isSaving) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                     } else {
-                        Text("Assign to Site")
+                        Text("Save Details", fontSize = 16.sp)
                     }
                 }
-                Spacer(Modifier.height(20.dp))
-            }
-        } // <-- END OF LAZYCOLUMN
 
-        if (showSheet) {
-            // ✅ PASS ALL NEW PARAMETERS TO THE SHEET
-            AssignSiteSheet(
-                sites = sites,
-                assignedSiteId = assignedSiteId,
-                onSelect = { siteId ->
-                    vm.assignToSite(siteId)
-                    showSheet = false
-                },
-                onUnassign = {
-                    vm.unassignFromSite()
-                    showSheet = false
-                },
-                onCreateNew = {
-                    showSheet = false
-                    navController.navigate("createSite")
-                },
-                onDismiss = { showSheet = false }
-            )
-        }
-    } // <-- END OF SCAFFOLD
-}
+                Spacer(modifier = Modifier.height(12.dp))
 
-@Composable
-fun DeviceHeaderSection(state: DeviceDetailUiState, connState: ConnectionState) {
-    // (This composable is unchanged)
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                "HipPro Belt Details",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-            Text("Serial No: ${state.serialNumber ?: "--"}", style = MaterialTheme.typography.bodyMedium)
-            Text("MAC: ${state.mac}", style = MaterialTheme.typography.bodyMedium)
-            Text("Last Seen: ${state.lastSeenStatus ?: "--"}", style = MaterialTheme.typography.bodyMedium)
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val isConnected = connState == ConnectionState.CONNECTED
-                Icon(
-                    imageVector = Icons.Filled.Wifi,
-                    contentDescription = null,
-                    tint = if (isConnected) Color(0xFF4CAF50) else Color.Red
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    when (connState) {
-                        ConnectionState.CONNECTED -> "Connected"
-                        ConnectionState.CONNECTING -> "Connecting…"
-                        ConnectionState.FAILED -> "Failed"
-                        ConnectionState.DISCONNECTED -> "Disconnected"
-                    },
-                    color = if (isConnected) Color(0xFF4CAF50) else Color.Red
+                ConnectionButton(
+                    state = state.connectionState,
+                    onConnect = vm::connect,
+                    onDisconnect = vm::disconnect
                 )
             }
         }
     }
-}
 
-@Composable
-fun ConnectionButtons(
-    connState: ConnectionState,
-    vm: DeviceDetailViewModel
-) {
-    // (This composable is unchanged)
-    if (connState != ConnectionState.CONNECTED) {
-        Button(
-            onClick = vm::connect,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = (connState != ConnectionState.CONNECTING)
-        ) {
-            if (connState == ConnectionState.CONNECTING) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("Connecting…")
-            } else {
-                Text("Connect")
-            }
-        }
-    } else {
-        Button(
-            onClick = vm::disconnect,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-        ) {
-            Icon(Icons.Filled.Close, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Disconnect")
-        }
+    if (showSiteSheet) {
+        SiteSelectionSheet(
+            sites = state.availableSites,
+            onSelect = {
+                vm.assignSite(it)
+                showSiteSheet = false
+            },
+            onDismiss = { showSiteSheet = false }
+        )
     }
 }
 
-// ✅ NEW, FULLY UPDATED BOTTOM SHEET COMPOSABLE
+// --- COMPONENTS ---
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AssignSiteSheet(
+fun TeamMemberDropdown(
+    options: List<String>,
+    selectedOption: String,
+    onOptionSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            readOnly = true,
+            value = selectedOption,
+            onValueChange = { },
+            label = { Text("Team Member") },
+            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            shape = RoundedCornerShape(12.dp)
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onOptionSelected(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DeviceStatusCard(state: DeviceDetailUiState, onGetSerial: () -> Unit) {
+    val isConnected = state.connectionState == ConnectionState.CONNECTED
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(if (isConnected) Color(0xFFE8F5E9) else Color(0xFFFFEBEE))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Wifi,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = if (isConnected) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(state.macAddress, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("Serial: ${state.serialNumber}", style = MaterialTheme.typography.bodyMedium)
+                if (isConnected) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = onGetSerial) { Text("Get Serial") }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                color = if (isConnected) Color(0xFF4CAF50) else Color.Gray,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = state.connectionState.name,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SiteAssignmentCard(assignedSiteName: String?, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text("Assigned Site", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f))
+                Text(
+                    text = assignedSiteName ?: "Tap to assign site",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+    }
+}
+
+@Composable
+fun ConnectionButton(state: ConnectionState, onConnect: () -> Unit, onDisconnect: () -> Unit) {
+    val isConnected = state == ConnectionState.CONNECTED
+    OutlinedButton(
+        onClick = if (isConnected) onDisconnect else onConnect,
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = if (isConnected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        if (state == ConnectionState.CONNECTING) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Connecting...")
+        } else {
+            Text(if (isConnected) "Disconnect Device" else "Connect Device")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SiteSelectionSheet(
     sites: List<SiteEntity>,
-    assignedSiteId: Int?,
-    onSelect: (Int) -> Unit,
-    onUnassign: () -> Unit,
-    onCreateNew: () -> Unit,
+    onSelect: (SiteEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .padding(20.dp)
-                .navigationBarsPadding() // Add padding for gesture nav
-        ) {
-            Text("Assign to Site", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(20.dp))
+        Column(modifier = Modifier.padding(24.dp).padding(bottom = 24.dp)) {
+            Text("Select Site", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // --- Check if site list is empty ---
-            if (sites.isEmpty()) {
-                Text(
-                    "No sites found. Create a new site to assign this device.",
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(16.dp)
-                )
-                Button(
-                    onClick = onCreateNew,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Create New Site")
-                }
+            if(sites.isEmpty()) {
+                Text("No sites available. Go to 'Clinical Sites' on Dashboard to create one (e.g., Apollo, Fortis).")
             } else {
-                // --- Show list of sites ---
-                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                    items(sites.size) { idx ->
-                        val site = sites[idx]
-                        val isAssigned = site.id == assignedSiteId
-
-                        Card(
-                            Modifier
+                LazyColumn {
+                    items(sites.size) { i ->
+                        Row(
+                            modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .clickable { onSelect(site.id) },
-                            shape = RoundedCornerShape(16.dp),
-                            // Highlight the assigned site
-                            colors = if (isAssigned) {
-                                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                            } else {
-                                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                            }
+                                .clickable { onSelect(sites[i]) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(site.siteName, style = MaterialTheme.typography.titleMedium)
-                                    site.location?.let {
-                                        Text(it, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                                if (isAssigned) {
-                                    Icon(
-                                        Icons.Filled.Check,
-                                        contentDescription = "Assigned",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+                            Icon(Icons.Default.Business, contentDescription = null, tint = Color.Gray)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(sites[i].siteName, fontSize = 16.sp)
                         }
-                    }
-                }
-
-                // --- Show Unassign button if a site is assigned ---
-                if (assignedSiteId != null) {
-                    Spacer(Modifier.height(16.dp))
-                    Button(
-                        onClick = onUnassign,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Unassign Device")
+                        HorizontalDivider()
                     }
                 }
             }
-            Spacer(Modifier.height(20.dp))
         }
     }
 }

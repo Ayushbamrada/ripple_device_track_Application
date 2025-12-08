@@ -10,7 +10,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import ripple.trackingmaster.devicetrackapp.data.local.AppDatabase
 import ripple.trackingmaster.devicetrackapp.data.local.dao.DeviceDao
 import ripple.trackingmaster.devicetrackapp.data.local.dao.SiteDao
-import ripple.trackingmaster.devicetrackapp.data.local.dao.DeviceAssignmentDao
 import javax.inject.Singleton
 
 @Module
@@ -25,20 +24,15 @@ object DatabaseModule {
             AppDatabase::class.java,
             "hippro_devices.db"
         )
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration() // This wipes data if schema changes (good for dev)
             .build()
     }
 
     @Provides
     @Singleton
-    fun provideDeviceDao(db: AppDatabase): DeviceDao = db.deviceDao()
+    fun provideDeviceDao(db: AppDatabase): DeviceDao = db.deviceDao() // ✅ Uncommented
 
     @Provides
     @Singleton
     fun provideSiteDao(db: AppDatabase): SiteDao = db.siteDao()
-
-    @Provides
-    @Singleton
-    fun provideDeviceAssignmentDao(db: AppDatabase): DeviceAssignmentDao =
-        db.deviceAssignmentDao()
 }

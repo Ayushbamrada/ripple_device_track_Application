@@ -1,166 +1,168 @@
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
-import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceEntity
 import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
-import ripple.trackingmaster.devicetrackapp.data.repo.DeviceRepository
+import ripple.trackingmaster.devicetrackapp.data.remote.dto.BeltApiResponse
+import ripple.trackingmaster.devicetrackapp.data.repo.DeviceControlRepository
+import ripple.trackingmaster.devicetrackapp.data.repo.NetworkBeltRepository
 import ripple.trackingmaster.devicetrackapp.data.repo.SiteRepository
 import ripple.trackingmaster.devicetrackapp.domain.model.ConnectionState
-import ripple.trackingmaster.devicetrackapp.domain.repository.BluetoothController
 import javax.inject.Inject
-
-data class DeviceDetailUiState(
-    val mac: String = "",
-    val serialNumber: String? = null,
-    val customName: String? = null,
-    val beltNumber: String? = null,
-    val beltSize: String? = null,
-    val lastSeenStatus: String? = null
-)
 
 @HiltViewModel
 class DeviceDetailViewModel @Inject constructor(
-    private val controller: BluetoothController,
-    private val repo: DeviceRepository,
-    private val siteRepo: SiteRepository,
-    private val savedStateHandle: SavedStateHandle
+    private val deviceRepository: DeviceControlRepository,
+    private val siteRepository: SiteRepository,
+    private val networkRepository: NetworkBeltRepository,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(DeviceDetailUiState())
-    val uiState: StateFlow<DeviceDetailUiState> = _uiState.asStateFlow()
+    private val macAddress: String = savedStateHandle.get<String>("mac") ?: ""
 
-    val connectionState: StateFlow<ConnectionState> = controller.connectionState
+    // Form State
+    private val _beltSize = MutableStateFlow("")
+    private val _teamMember = MutableStateFlow("")
+    private val _assignedSite = MutableStateFlow<SiteEntity?>(null)
 
-    val sites: StateFlow<List<SiteEntity>> =
-        siteRepo.observeSites()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _saveState = MutableStateFlow<SaveStatus>(SaveStatus.Idle)
+    private var lastKnownSerial = "Unknown"
 
-    private val _saveButtonText = MutableStateFlow("Save Details")
-    val saveButtonText: StateFlow<String> = _saveButtonText.asStateFlow()
-
-    private val mac: String = savedStateHandle.get("mac") ?: ""
-
-    val assignedSiteId: StateFlow<Int?> = siteRepo.observeSiteIdForDevice(mac)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    init {
-        _uiState.update { it.copy(mac = mac) }
-        loadDeviceDetails()
-        observeSerialFlow()
+    sealed class SaveStatus {
+        object Idle : SaveStatus()
+        object Saving : SaveStatus()
+        data class Success(val message: String) : SaveStatus()
+        data class Error(val message: String) : SaveStatus()
     }
 
-    private fun loadDeviceDetails() {
+    val uiState: StateFlow<DeviceDetailUiState> = combine(
+        deviceRepository.serialNumber,
+        deviceRepository.connectionState,
+        _beltSize,
+        _teamMember,
+        _assignedSite,
+        siteRepository.observeSites(),
+        _saveState
+    ) { args ->
+        val incomingSerial = args[0] as String
+        val connState = args[1] as ConnectionState
+        val belt = args[2] as String
+        val member = args[3] as String
+        val site = args[4] as? SiteEntity
+        @Suppress("UNCHECKED_CAST")
+        val sites = args[5] as List<SiteEntity>
+        val saveStatus = args[6] as SaveStatus
+
+        if (incomingSerial != "Unknown" && incomingSerial.isNotBlank()) {
+            lastKnownSerial = incomingSerial
+        }
+
+        DeviceDetailUiState(
+            macAddress = macAddress,
+            serialNumber = lastKnownSerial,
+            connectionState = connState,
+            beltSize = belt,
+            teamMember = member,
+            assignedSite = site,
+            availableSites = sites,
+            // You can also load these options from a DB/API if needed
+            teamMemberOptions = listOf("Ayush", "Mukul", "Happy", "Abhi"),
+            isSaving = saveStatus is SaveStatus.Saving,
+            saveMessage = (saveStatus as? SaveStatus.Success)?.message,
+            errorMessage = (saveStatus as? SaveStatus.Error)?.message
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = DeviceDetailUiState(macAddress = macAddress)
+    )
+
+    init {
+        connect()
+        // ✅ NEW: Pre-fill data if it exists in the database
+        loadExistingData()
+    }
+
+    private fun loadExistingData() {
         viewModelScope.launch {
-            val existingDevice = repo.getDevice(mac)
-            if (existingDevice != null) {
-                _uiState.update {
-                    it.copy(
-                        serialNumber = existingDevice.serialNumber,
-                        customName = existingDevice.customName,
-                        beltNumber = existingDevice.beltNumber,
-                        beltSize = existingDevice.beltSize,
-                        // ▼▼▼ THIS WAS THE TYPO ▼▼▼
-                        lastSeenStatus = existingDevice.lastSeenStatus
-                    )
+            // 1. Get the belt from DB
+            val savedBelt = networkRepository.getBeltByMac(macAddress)
+
+            if (savedBelt != null) {
+                // 2. Pre-fill text fields
+                _beltSize.value = savedBelt.beltSize ?: ""
+                _teamMember.value = savedBelt.teamMember ?: ""
+
+                // 3. Pre-fill Site (We have to find the SiteEntity by name)
+                if (!savedBelt.assignedTo.isNullOrEmpty()) {
+                    // We get the list of sites currently available to find the matching object
+                    val allSites = siteRepository.observeSites().first()
+                    val matchingSite = allSites.find { it.siteName == savedBelt.assignedTo }
+                    _assignedSite.value = matchingSite
                 }
             }
         }
     }
 
-    private fun observeSerialFlow() {
-        viewModelScope.launch {
-            controller.serialFlow.collect { realSerial ->
-                Log.d("DeviceDetailVM", "🔐 REAL SERIAL RECEIVED: $realSerial")
-                _uiState.update { it.copy(serialNumber = realSerial) }
-                saveDeviceDetails()
-            }
-        }
-    }
-
-    // --------------------------------------------------------------
-    // CONNECT / DISCONNECT
-    // --------------------------------------------------------------
     fun connect() {
-        viewModelScope.launch {
-            val ok = controller.connect(mac)
-            if (ok) {
-                _uiState.update { it.copy(lastSeenStatus = "Connected") }
-            } else {
-                _uiState.update { it.copy(lastSeenStatus = "Connection Failed") }
-            }
+        if (macAddress.isNotBlank()) {
+            viewModelScope.launch { deviceRepository.connect(macAddress) }
         }
     }
 
     fun disconnect() {
-        controller.disconnect()
-        _uiState.update { it.copy(lastSeenStatus = "Disconnected") }
-        saveDeviceDetails()
+        viewModelScope.launch { deviceRepository.disconnect() }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        disconnect()
+    fun fetchSerialNumber() {
+        // Updated command from your Flutter code
+        val command = "aa1955000000000000000000"
+        viewModelScope.launch {
+            deviceRepository.sendCommand(command)
+        }
     }
 
-    // --------------------------------------------------------------
-    // ASSIGN / UNASSIGN
-    // --------------------------------------------------------------
-    fun assignToSite(siteId: Int) {
-        viewModelScope.launch { siteRepo.assignDeviceToSite(uiState.value.mac, siteId) }
-    }
+    fun updateBeltSize(size: String) { _beltSize.value = size }
+    fun updateTeamMember(name: String) { _teamMember.value = name }
+    fun assignSite(site: SiteEntity) { _assignedSite.value = site }
+    fun clearMessages() { _saveState.value = SaveStatus.Idle }
 
-    fun unassignFromSite() {
-        viewModelScope.launch { siteRepo.unassignDevice(uiState.value.mac) }
-    }
+    fun saveDetails() {
+        val currentState = uiState.value
 
-    // --------------------------------------------------------------
-    // Editable Fields
-    // --------------------------------------------------------------
-    fun updateName(name: String) {
-        _uiState.update { it.copy(customName = name) }
-    }
-
-    fun updateBeltNumber(num: String) {
-        _uiState.update { it.copy(beltNumber = num) }
-    }
-
-    fun updateBeltSize(size: String) {
-        _uiState.update { it.copy(beltSize = size) }
-    }
-
-    // --------------------------------------------------------------
-    // SAVE DEVICE
-    // --------------------------------------------------------------
-    fun saveDeviceDetails() {
-        if (_saveButtonText.value != "Save Details") {
+        if (currentState.beltSize.isBlank()) {
+            _saveState.value = SaveStatus.Error("Please enter Belt Size")
             return
         }
-        _saveButtonText.value = "Saving..."
+        if (currentState.teamMember.isBlank()) {
+            _saveState.value = SaveStatus.Error("Please select a Team Member")
+            return
+        }
 
         viewModelScope.launch {
-            val s = uiState.value
-            val entity = DeviceEntity(
-                mac = s.mac,
-                serialNumber = s.serialNumber,
-                customName = s.customName ?: "Hip-Pro",
-                beltNumber = s.beltNumber,
-                beltSize = s.beltSize,
-                lastSeenStatus = s.lastSeenStatus
-            )
+            _saveState.value = SaveStatus.Saving
+            try {
+                val beltData = BeltApiResponse(
+                    id = 0,
+                    macAddress = macAddress,
+                    serialNumber = if (lastKnownSerial == "Unknown") null else lastKnownSerial,
+                    beltSize = currentState.beltSize,
+                    teamMember = currentState.teamMember,
+                    assignedTo = currentState.assignedSite?.siteName,
+                    createdAt = "",
+                    updatedAt = ""
+                )
 
-            repo.saveDevice(entity)
-            Log.d("DeviceDetailVM", "💾 Device saved: $entity")
+                networkRepository.syncBelt(beltData)
 
-            _saveButtonText.value = "Saved!"
-            delay(2000)
-            _saveButtonText.value = "Save Details"
+                _saveState.value = SaveStatus.Success("Device saved successfully!")
+            } catch (e: Exception) {
+                _saveState.value = SaveStatus.Error(e.message ?: "Failed to save data")
+            }
         }
     }
 }

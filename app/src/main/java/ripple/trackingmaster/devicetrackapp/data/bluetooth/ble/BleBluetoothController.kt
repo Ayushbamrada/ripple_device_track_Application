@@ -1,31 +1,25 @@
 package ripple.trackingmaster.devicetrackapp.data.bluetooth.ble
 
 import android.util.Log
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import ripple.trackingmaster.devicetrackapp.domain.model.ConnectionState
-// import ripple.trackingmaster.devicetrackapp.domain.model.SensorData <-- DELETE THIS
 import ripple.trackingmaster.devicetrackapp.domain.repository.BluetoothController
+import javax.inject.Inject
 
-class BleBluetoothController : BluetoothController {
+class BleBluetoothController @Inject constructor() : BluetoothController {
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    override val connectionState: StateFlow<ConnectionState> = _connectionState
+    override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    // --- DELETE SENSOR DATA ---
-    // private val _sensorData = MutableStateFlow<SensorData?>(null)
-    // override val sensorData: StateFlow<SensorData?> = _sensorData
-    // --- END DELETE ---
+    private val _incomingMessages = MutableStateFlow("")
+    override val incomingMessages: StateFlow<String> = _incomingMessages.asStateFlow()
 
-    private val _serialFlow = MutableSharedFlow<String>()
-    override val serialFlow: SharedFlow<String> = _serialFlow
-
-    override suspend fun connect(address: String): Boolean {
-        Log.d("BleBT", "BLE connect called (not implemented yet)")
+    override fun connect(macAddress: String) {
+        Log.d("BleBT", "BLE connect called for $macAddress (Stub)")
         _connectionState.value = ConnectionState.CONNECTED
-        return true
+        _incomingMessages.value = "SN:BLE-STUB-123"
     }
 
     override fun disconnect() {
@@ -33,15 +27,7 @@ class BleBluetoothController : BluetoothController {
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
-    override fun startStreaming() {
-        Log.d("BleBT", "BLE start streaming (stub)")
-    }
-
-    override fun stopStreaming() {
-        Log.d("BleBT", "BLE stop streaming (stub)")
-    }
-
-    override fun sendReset() {
-        Log.d("BleBT", "BLE send reset (stub)")
+    override fun sendCommand(command: String) {
+        Log.d("BleBT", "BLE send command: $command")
     }
 }

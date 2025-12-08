@@ -5,175 +5,149 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.util.Log
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import ripple.trackingmaster.devicetrackapp.domain.model.ConnectionState
-// import ripple.trackingmaster.devicetrackapp.domain.model.SensorData  <-- DELETE THIS
 import ripple.trackingmaster.devicetrackapp.domain.repository.BluetoothController
-import java.io.BufferedInputStream
 import java.io.IOException
-import java.net.SocketTimeoutException
-import java.util.*
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.UUID
+import javax.inject.Inject
 
-class ClassicBluetoothController(
-    private val adapter: BluetoothAdapter
+class ClassicBluetoothController @Inject constructor(
+    private val bluetoothAdapter: BluetoothAdapter
 ) : BluetoothController {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var socket: BluetoothSocket? = null
-    private var device: BluetoothDevice? = null
-
-    private val sppUuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    override val connectionState: StateFlow<ConnectionState> = _connectionState
+    override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    // --- REMOVED SENSOR DATA ---
-    // private val _sensorData = MutableStateFlow<SensorData?>(null)
-    // override val sensorData: StateFlow<SensorData?> = _sensorData
+    private val _incomingMessages = MutableStateFlow("")
+    override val incomingMessages: StateFlow<String> = _incomingMessages.asStateFlow()
 
-    private val _serialFlow = MutableSharedFlow<String>(replay = 1)
-    override val serialFlow: SharedFlow<String> = _serialFlow
+    private var socket: BluetoothSocket? = null
+    private var inputStream: InputStream? = null
+    private var outputStream: OutputStream? = null
 
-    private var deviceStatusFull = StringBuilder()
+    // Standard SPP UUID
+    private val uuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     @SuppressLint("MissingPermission")
-    override suspend fun connect(address: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            _connectionState.value = ConnectionState.CONNECTING
-            device = adapter.getRemoteDevice(address)
-            adapter.cancelDiscovery()
-            socket?.close()
-            val tmpSocket = device!!.createRfcommSocketToServiceRecord(sppUuid)
-            socket = tmpSocket
-            tmpSocket.connect()
-            _connectionState.value = ConnectionState.CONNECTED
-            Log.d("ClassicBT", "✅ Connected successfully")
+    override fun connect(macAddress: String) {
+        if (_connectionState.value == ConnectionState.CONNECTED) return
+        _connectionState.value = ConnectionState.CONNECTING
 
-            startReadingSerial()
-            sendReset()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val device: BluetoothDevice = bluetoothAdapter.getRemoteDevice(macAddress)
+                bluetoothAdapter.cancelDiscovery()
 
-            true
-        } catch (e: Exception) {
-            Log.e("ClassicBT", "❌ Connection failed: ${e.message}")
-            _connectionState.value = ConnectionState.FAILED
-            false
+                // ✅ USE INSECURE SOCKET (Matches Flutter behavior)
+                socket = device.createInsecureRfcommSocketToServiceRecord(uuid)
+                socket?.connect()
+
+                inputStream = socket?.inputStream
+                outputStream = socket?.outputStream
+
+                _connectionState.value = ConnectionState.CONNECTED
+                Log.d("ClassicBT", "✅ Connected (Insecure) to $macAddress")
+
+                // Small delay to let connection settle
+                delay(500)
+
+                listenForData()
+
+            } catch (e: IOException) {
+                Log.e("ClassicBT", "Connection failed", e)
+                closeConnection()
+            }
+        }
+    }
+
+    private fun listenForData() {
+        val buffer = ByteArray(1024)
+        Log.i("ClassicBT", "🎧 Reading Loop Started")
+
+        while (_connectionState.value == ConnectionState.CONNECTED) {
+            try {
+                if (inputStream == null) break
+
+                // ✅ BLOCKING READ: Waits here until data arrives
+                val bytes = inputStream!!.read(buffer)
+
+                if (bytes > 0) {
+                    val rawData = buffer.copyOf(bytes)
+                    // Convert to Hex String for consistency
+                    val hexString = rawData.joinToString("") { "%02x".format(it) }
+
+                    Log.i("ClassicBT", "🔥 DATA RECEIVED: $hexString")
+                    _incomingMessages.value = hexString
+                } else if (bytes == -1) {
+                    Log.w("ClassicBT", "Stream closed")
+                    disconnect()
+                    break
+                }
+            } catch (e: IOException) {
+                Log.e("ClassicBT", "Read error", e)
+                disconnect()
+                break
+            }
         }
     }
 
     override fun disconnect() {
+        closeConnection()
+    }
+
+    override fun sendCommand(command: String) {
+        if (_connectionState.value != ConnectionState.CONNECTED || outputStream == null) {
+            Log.e("ClassicBT", "Cannot send: Not connected")
+            return
+        }
+        try {
+            // ✅ DEBUG LOG: Show exactly what we are trying to send
+            Log.d("ClassicBT", "Preparing to send HEX: $command")
+
+            val bytes = hexStringToByteArray(command)
+
+            // ✅ DEBUG LOG: Show the actual byte values (signed)
+            Log.d("ClassicBT", "Sending Bytes: ${bytes.joinToString(",")}")
+
+            outputStream?.write(bytes)
+            outputStream?.flush()
+            Log.d("ClassicBT", "✅ Data flushed to stream")
+
+        } catch (e: Exception) {
+            Log.e("ClassicBT", "Failed to send command", e)
+            disconnect()
+        }
+    }
+
+    // ✅ FIXED: Bulletproof Hex -> Byte converter
+    private fun hexStringToByteArray(s: String): ByteArray {
+        val len = s.length
+        val data = ByteArray(len / 2)
+        try {
+            for (i in 0 until len step 2) {
+                data[i / 2] = ((Character.digit(s[i], 16) shl 4) +
+                        Character.digit(s[i + 1], 16)).toByte()
+            }
+        } catch (e: Exception) {
+            Log.e("ClassicBT", "Hex conversion failed. Check string format.", e)
+        }
+        return data
+    }
+
+    private fun closeConnection() {
         try {
             socket?.close()
-        } catch (_: IOException) {}
-        socket = null
-        _connectionState.value = ConnectionState.DISCONNECTED
-    }
-
-    override fun sendReset() {
-        scope.launch {
-            try {
-                socket?.outputStream?.write(byteArrayOf(0xAA.toByte(), 0xAA.toByte(), 0x55, 0, 0, 0, 0))
-                Log.d("ClassicBT", "✅ Reset command sent")
-            } catch (e: Exception) {
-                Log.e("ClassicBT", "❌ Reset send failed: ${e.message}")
-            }
-        }
-    }
-
-    /**
-     * Parses the 38-char hex string into an ASCII Serial Number.
-     * @param serialHex The 38-char hex data *after* the header.
-     */
-    private fun parseAndEmitSerial(serialHex: String) {
-        scope.launch {
-            try {
-                val serialAscii = serialHex.chunked(2)
-                    .map { it.toInt(16).toChar() }
-                    .joinToString("")
-                    .replace(Regex("[^A-Za-z0-9]"), "") // Clean up any null/non-printable chars
-
-                Log.d("ClassicBT", "✅✅✅ Parsed Serial: $serialAscii")
-                _serialFlow.emit(serialAscii)
-
-            } catch (e: Exception) {
-                Log.e("ClassicBT", "Serial parse failed: ${e.message}", e)
-            }
-        }
-    }
-
-    // --- REMOVED parseAndEmitSensorData and hexToFloat ---
-
-    private fun startReadingSerial() {
-        scope.launch(Dispatchers.IO) {
-            val input = socket?.inputStream ?: return@launch
-            val bufferedInput = BufferedInputStream(input, 1024)
-
-            // We now look for "58fc41" EXACTLY, as you discovered.
-            val headerPattern = Regex("58fc41")
-            val headerLength = 6
-            val dataLength = 38 // The 19-byte serial number (38 hex chars)
-            val totalPacketLength = headerLength + dataLength // 44 chars
-
-            val tempBuffer = ByteArray(1024)
-
-            Log.d("ClassicBT", "📡 Listening for serial packets...")
-
-            while (isActive && connectionState.value == ConnectionState.CONNECTED) {
-                try {
-                    val bytesRead = bufferedInput.read(tempBuffer)
-                    if (bytesRead == -1) throw IOException("Socket closed")
-
-                    if (bytesRead > 0) {
-                        // Append the new hex chunk to our buffer
-                        val hexChunk = tempBuffer.take(bytesRead)
-                            .joinToString("") { String.format("%02x", it) }
-                        deviceStatusFull.append(hexChunk)
-                        Log.d("ClassicBT", "Read Hex: $hexChunk")
-
-                        if (deviceStatusFull.length > 256) {
-                            deviceStatusFull = StringBuilder(deviceStatusFull.takeLast(256))
-                        }
-
-                        // Check for a header
-                        val headerMatch = headerPattern.find(deviceStatusFull)
-                        if (headerMatch != null) {
-                            val startIndex = headerMatch.range.first
-
-                            // Check if we have the full packet
-                            if (deviceStatusFull.length >= startIndex + totalPacketLength) {
-
-                                // Extract just the 38-char data part
-                                val dataStartIndex = startIndex + headerLength
-                                val dataEndIndex = dataStartIndex + dataLength
-                                val serialHexData = deviceStatusFull.substring(dataStartIndex, dataEndIndex)
-
-                                // Send it to the serial parser
-                                parseAndEmitSerial(serialHexData)
-
-                                // Clear the processed packet from the buffer
-                                deviceStatusFull = StringBuilder(deviceStatusFull.substring(dataEndIndex))
-                            }
-                        }
-                    }
-                } catch (e: SocketTimeoutException) {
-                    Log.w("ClassicBT", "Timeout: ${e.message}")
-                } catch (e: Exception) {
-                    Log.e("ClassicBT", "Read Error, stopping listener: ${e.message}")
-                    disconnect()
-                    break
-                }
-            }
-        }
-    }
-
-    override fun startStreaming() {
-        Log.d("ClassicBT", "Start streaming called (doing nothing).")
-    }
-
-    override fun stopStreaming() {
-        Log.d("ClassicBT", "Stop streaming called (doing nothing).")
+            socket = null
+            _connectionState.value = ConnectionState.DISCONNECTED
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }

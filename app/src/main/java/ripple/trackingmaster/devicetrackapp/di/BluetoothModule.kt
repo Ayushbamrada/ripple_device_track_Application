@@ -10,32 +10,26 @@ import dagger.hilt.components.SingletonComponent
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Singleton
 import ripple.trackingmaster.devicetrackapp.data.bluetooth.classic.ClassicBluetoothController
-import ripple.trackingmaster.devicetrackapp.data.bluetooth.ble.BleBluetoothController
 import ripple.trackingmaster.devicetrackapp.domain.repository.BluetoothController
 
 @Module
 @InstallIn(SingletonComponent::class)
 object BluetoothModule {
 
-    // Toggle true → Use BLE controller in future
-    private const val USE_BLE = false
-
     @Provides
     @Singleton
     fun provideBluetoothAdapter(@ApplicationContext context: Context): BluetoothAdapter {
+        // We assume the device HAS Bluetooth. If manager.adapter is null, this will throw,
+        // which is correct because the app cannot function without Bluetooth.
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        return manager.adapter
+        return manager.adapter ?: throw IllegalStateException("Bluetooth not supported on this device")
     }
 
     @Provides
     @Singleton
     fun provideBluetoothController(
-        adapter: BluetoothAdapter
+        adapter: BluetoothAdapter // Changed from BluetoothAdapter? to BluetoothAdapter
     ): BluetoothController {
-        return if (USE_BLE) {
-            BleBluetoothController()
-        } else {
-            ClassicBluetoothController(adapter)
-        }
+        return ClassicBluetoothController(adapter)
     }
 }

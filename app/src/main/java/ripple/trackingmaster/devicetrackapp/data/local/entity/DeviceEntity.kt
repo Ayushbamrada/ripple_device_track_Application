@@ -11,9 +11,9 @@ import androidx.room.PrimaryKey
 data class DeviceEntity(
     @PrimaryKey val mac: String,           // Unique MAC address
     val serialNumber: String? = null,      // Belt’s serial number
-    val customName: String? = null,        // Editable display name (e.g., "Hip-Pro 1")
-    val beltNumber: String? = null,           // Optional user-assigned number
-    val beltSize: String? = null,          // Optional size label
-    val lastSeenStatus: String? = null,    // "Connected", "Disconnected", etc.
+    val beltSize: String? = null,          // Optional size label (e.g. "34")
+    val teamMember: String? = null,        // ✅ Name of person assigned
+    val assignedSiteName: String? = null,  // ✅ Site name (e.g. "Apollo")
+    val lastSeenStatus: String? = null,    // "Connected", "Disconnected"
     val createdAt: Long = System.currentTimeMillis()
 )

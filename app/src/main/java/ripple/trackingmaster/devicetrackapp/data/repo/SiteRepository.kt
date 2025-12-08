@@ -1,16 +1,16 @@
 package ripple.trackingmaster.devicetrackapp.data.repo
 
 import kotlinx.coroutines.flow.Flow
-import ripple.trackingmaster.devicetrackapp.data.local.dao.DeviceAssignmentDao
+// import ripple.trackingmaster.devicetrackapp.data.local.dao.DeviceAssignmentDao <-- DELETE THIS
 import ripple.trackingmaster.devicetrackapp.data.local.dao.SiteDao
-import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceAssignmentEntity
-import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceEntity
+// import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceAssignmentEntity <-- DELETE THIS
+// import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceEntity <-- DELETE THIS
 import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
 import javax.inject.Inject
 
 class SiteRepository @Inject constructor(
-    private val siteDao: SiteDao,
-    private val assignDao: DeviceAssignmentDao
+    private val siteDao: SiteDao
+    // private val assignDao: DeviceAssignmentDao <-- DELETE THIS
 ) {
     fun observeSites(): Flow<List<SiteEntity>> = siteDao.observeSites()
 
@@ -20,17 +20,9 @@ class SiteRepository @Inject constructor(
         siteDao.insert(SiteEntity(siteName = name, location = location))
     }
 
-    fun observeDevicesForSite(siteId: Int): Flow<List<DeviceEntity>> =
-        assignDao.observeDevicesForSite(siteId)
-
-    suspend fun assignDeviceToSite(mac: String, siteId: Int) {
-        assignDao.assign(DeviceAssignmentEntity(mac = mac, siteId = siteId))
-    }
-
-    suspend fun unassignDevice(mac: String) {
-        assignDao.unassignDevice(mac)
-    }
-    // ✅ ADD THIS NEW FUNCTION
-    fun observeSiteIdForDevice(mac: String): Flow<Int?> =
-        assignDao.observeSiteIdForDevice(mac)
+    // --- DELETE ALL FUNCTIONS BELOW THIS LINE ---
+    // fun observeDevicesForSite(siteId: Int): Flow<List<DeviceEntity>> = ...
+    // suspend fun assignDeviceToSite(mac: String, siteId: Int) { ... }
+    // suspend fun unassignDevice(mac: String) { ... }
+    // fun observeSiteIdForDevice(mac: String): Flow<Int?> = ...
 }

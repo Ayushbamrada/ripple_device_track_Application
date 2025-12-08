@@ -1,150 +1,33 @@
-//@file:OptIn(ExperimentalMaterial3Api::class)
-//
-//package ripple.trackingmaster.devicetrackapp.ui.screens
-//
-//import androidx.compose.foundation.layout.*
-//import androidx.compose.foundation.shape.RoundedCornerShape
-//import androidx.compose.material.icons.Icons
-//import androidx.compose.material.icons.filled.Bluetooth
-//import androidx.compose.material.icons.filled.List
-//import androidx.compose.material.icons.filled.LocationOn
-//import androidx.compose.material3.*
-//import androidx.compose.runtime.*
-//import androidx.compose.ui.Alignment
-//import androidx.compose.ui.Modifier
-//import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel
-//
-//@Composable
-//fun DashboardScreen(
-//    onScanClick: () -> Unit,
-//    onSavedDevicesClick: () -> Unit,
-//    onSitesClick: () -> Unit,
-//    vm: DashboardViewModel = hiltViewModel()
-//) {
-//    val stats by vm.stats.collectAsState()
-//
-//    Scaffold(
-//        topBar = {
-//            CenterAlignedTopAppBar(
-//                title = { Text("HipPro Device Manager") }
-//            )
-//        }
-//    ) { padding ->
-//
-//        Column(
-//            modifier = Modifier
-//                .padding(padding)
-//                .padding(20.dp)
-//                .fillMaxSize(),
-//            verticalArrangement = Arrangement.Top
-//        ) {
-//
-//            // ---- Stats Card ----
-//            Card(
-//                modifier = Modifier.fillMaxWidth(),
-//                shape = RoundedCornerShape(18.dp),
-//                elevation = CardDefaults.cardElevation(6.dp)
-//            ) {
-//                Column(
-//                    Modifier.padding(20.dp)
-//                ) {
-//                    Text(
-//                        "Total Registered Belts",
-//                        style = MaterialTheme.typography.titleMedium
-//                    )
-//                    Spacer(Modifier.height(8.dp))
-//                    Text(
-//                        stats.totalDevices.toString(),
-//                        style = MaterialTheme.typography.headlineLarge,
-//                        color = MaterialTheme.colorScheme.primary
-//                    )
-//                }
-//            }
-//
-//            Spacer(Modifier.height(32.dp))
-//
-//            // ---- Actions ----
-//            Text("Actions", style = MaterialTheme.typography.titleMedium)
-//            Spacer(Modifier.height(16.dp))
-//
-//            Column(
-//                modifier = Modifier.fillMaxWidth(),
-//                verticalArrangement = Arrangement.spacedBy(18.dp)
-//            ) {
-//
-//                DashboardButton(
-//                    text = "Scan Nearby Devices",
-//                    icon = Icons.Default.Bluetooth,
-//                    onClick = onScanClick
-//                )
-//
-//                DashboardButton(
-//                    text = "Saved Belts",
-//                    icon = Icons.Default.List,
-//                    onClick = onSavedDevicesClick
-//                )
-//
-//                DashboardButton(
-//                    text = "Site Management",
-//                    icon = Icons.Default.LocationOn,
-//                    onClick = onSitesClick
-//                )
-//            }
-//        }
-//    }
-//}
-//
-//@Composable
-//fun DashboardButton(
-//    text: String,
-//    icon: androidx.compose.ui.graphics.vector.ImageVector,
-//    onClick: () -> Unit
-//) {
-//    Card(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .height(70.dp),
-//        shape = RoundedCornerShape(14.dp),
-//        elevation = CardDefaults.cardElevation(4.dp),
-//        onClick = onClick
-//    ) {
-//        Row(
-//            Modifier
-//                .fillMaxSize()
-//                .padding(horizontal = 20.dp),
-//            verticalAlignment = Alignment.CenterVertically,
-//            horizontalArrangement = Arrangement.spacedBy(20.dp)
-//        ) {
-//
-//            Icon(
-//                imageVector = icon,
-//                contentDescription = null,
-//                tint = MaterialTheme.colorScheme.primary
-//            )
-//
-//            Text(
-//                text,
-//                style = MaterialTheme.typography.bodyLarge
-//            )
-//        }
-//    }
-//}
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
-import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
@@ -153,118 +36,83 @@ fun DashboardScreen(
     onScanClick: () -> Unit,
     onSavedDevicesClick: () -> Unit,
     onSitesClick: () -> Unit,
-    vm: DashboardViewModel = hiltViewModel()
+    vm: DashboardViewModel = hiltViewModel() // ✅ USE NEW VIEWMODEL
 ) {
-    val stats by vm.stats.collectAsState()
-
-    val total by animateIntAsState(stats.totalDevices)
-    val assigned by animateIntAsState(stats.assignedDevices)
-    val sites by animateIntAsState(stats.totalSites)
+    // Get the new state from the ViewModel
+    val uiState by vm.uiState.collectAsState()
 
     Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("HipPro Device Manager") }
-            )
-        }
+        topBar = { CenterAlignedTopAppBar(title = { Text("Hip-Pro Dashboard") }) }
     ) { padding ->
-
         Column(
-            Modifier
+            modifier = Modifier
                 .padding(padding)
-                .padding(20.dp)
-                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            MetricsRow(total, assigned, sites)
+            // "Scan for Devices" button
+            DashboardButton(
+                icon = Icons.Filled.Search,
+                title = "Scan for Devices",
+                subtitle = "Find and connect to new belts",
+                onClick = onScanClick
+            )
 
-            Spacer(Modifier.height(30.dp))
+            // "Saved Devices" button - now shows count
+            DashboardButton(
+                icon = Icons.Filled.List,
+                title = "Saved Devices",
+                subtitle = "${uiState.deviceCount} devices in database",
+                onClick = onSavedDevicesClick
+            )
 
-            Text("Actions", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(16.dp))
-
-            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                DashboardButton(
-                    text = "Scan Nearby Devices",
-                    icon = Icons.Filled.Bluetooth,
-                    onClick = onScanClick
-                )
-
-                DashboardButton(
-                    text = "Saved Belts",
-                    icon = Icons.AutoMirrored.Filled.List,
-                    onClick = onSavedDevicesClick
-                )
-
-                DashboardButton(
-                    text = "Site Management",
-                    icon = Icons.Filled.LocationOn,
-                    onClick = onSitesClick
-                )
-            }
+            // "Clinical Sites" button - now shows count
+            DashboardButton(
+                icon = Icons.Filled.Build,
+                title = "Clinical Sites",
+                subtitle = "${uiState.siteCount} sites configured",
+                onClick = onSitesClick
+            )
         }
     }
 }
 
 @Composable
-fun MetricsRow(total: Int, assigned: Int, sites: Int) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        MetricCard("Total Belts", total, Icons.Filled.Storage, Modifier.weight(1f))
-        MetricCard("Assigned", assigned, Icons.Filled.Bluetooth, Modifier.weight(1f))
-        MetricCard("Sites", sites, Icons.Filled.LocationOn, Modifier.weight(1f))
-    }
-}
-
-@Composable
-fun MetricCard(
-    label: String,
-    value: Int,
+private fun DashboardButton(
     icon: ImageVector,
-    modifier: Modifier = Modifier
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier.padding(horizontal = 4.dp),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(6.dp)
-    ) {
-        Column(
-            Modifier.padding(14.dp),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(6.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                value.toString(),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-@Composable
-fun DashboardButton(text: String, icon: ImageVector, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(70.dp),
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
-        onClick = onClick
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, tint = MaterialTheme.colorScheme.primary, contentDescription = null)
-            Text(text, style = MaterialTheme.typography.bodyLarge)
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
     }
 }

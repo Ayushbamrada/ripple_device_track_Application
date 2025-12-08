@@ -1,72 +1,59 @@
-//package ripple.trackingmaster.devicetrackapp.ui.screens
-//
-//import androidx.lifecycle.ViewModel
-//import androidx.lifecycle.viewModelScope
-//import dagger.hilt.android.lifecycle.HiltViewModel
-//import kotlinx.coroutines.flow.*
-//import kotlinx.coroutines.launch
-//import ripple.trackingmaster.devicetrackapp.data.repo.SiteRepository
-//import javax.inject.Inject
-//
-//@HiltViewModel
-//class SitesViewModel @Inject constructor(
-//    private val repo: SiteRepository
-//) : ViewModel() {
-//
-//    val sites = repo.observeSites()
-//        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-//
-//    fun createSite(name: String, loc: String?) {
-//        viewModelScope.launch {
-//            repo.createSite(name, loc)
-//        }
-//    }
-//}
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
+import ripple.trackingmaster.devicetrackapp.data.repo.NetworkBeltRepository
 import ripple.trackingmaster.devicetrackapp.data.repo.SiteRepository
 import javax.inject.Inject
 
-data class SiteUiModel(
-    val id: Int,
-    val siteName: String,
-    val location: String?,
+// A new UI model to hold the site and its device count
+data class SiteWithDeviceCount(
+    val site: SiteEntity,
     val deviceCount: Int
 )
 
 @HiltViewModel
 class SitesViewModel @Inject constructor(
-    private val repo: SiteRepository
+    private val siteRepository: SiteRepository,
+    private val beltRepository: NetworkBeltRepository
 ) : ViewModel() {
 
-    val sites: StateFlow<List<SiteUiModel>> =
-        repo.observeSites()
-            .flatMapLatest { siteList ->
-                if (siteList.isEmpty()) {
-                    flowOf(emptyList())
-                } else {
-                    combine(
-                        siteList.map { site ->
-                            repo.observeDevicesForSite(site.id).map { devices ->
-                                SiteUiModel(
-                                    id = site.id,
-                                    siteName = site.siteName,
-                                    location = site.location,
-                                    deviceCount = devices.size
-                                )
-                            }
-                        }
-                    ) { it.toList() }
-                }
-            }
-            .stateIn(
-                viewModelScope,
-                SharingStarted.WhileSubscribed(5000),
-                emptyList()
-            )
+    // Get the flow of all sites from the local DB
+    private val sitesFlow = siteRepository.observeSites()
+
+    // Get the flow of all belts from the network
+    private val beltsFlow = beltRepository.belts
+
+    // Combine them to create the UI state
+    val sitesWithCount: StateFlow<List<SiteWithDeviceCount>> = combine(
+        sitesFlow,
+        beltsFlow
+    ) { sites, belts ->
+        // Create a map of site name -> device count
+        val deviceCountBySite = belts
+            .filter { !it.assignedTo.isNullOrEmpty() }
+            .groupBy { it.assignedTo!! }
+            .mapValues { it.value.size }
+
+        // Map each SiteEntity to our new UI model
+        sites.map { site ->
+            val count = deviceCountBySite[site.siteName] ?: 0
+            SiteWithDeviceCount(site = site, deviceCount = count)
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    init {
+        // Ensure the belt list is fresh when this VM is created
+        beltRepository.refreshBelts()
+    }
 }

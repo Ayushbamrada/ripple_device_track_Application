@@ -14,16 +14,13 @@ import ripple.trackingmaster.devicetrackapp.ui.screens.permissions.PermissionVie
 fun AppNavigation() {
 
     val nav = rememberNavController()
-
     val vm: PermissionViewModel = hiltViewModel()
-
     val hasPermissions by vm.hasPermissions.collectAsState(initial = false)
 
     NavHost(
         navController = nav,
         startDestination = if (hasPermissions) "dashboard" else "permissions"
-    )
-    {
+    ) {
 
         composable("permissions") {
             PermissionsScreen(onContinue = { nav.navigate("dashboard") })
@@ -49,18 +46,9 @@ fun AppNavigation() {
             )
         }
 
-//        composable("device/{mac}") { backStack ->
-//            val mac = backStack.arguments?.getString("mac") ?: ""
-//            DeviceDetailScreen(mac = mac)
-//        }
-
-        composable("device/{mac}") { backStack ->
-            val mac = backStack.arguments?.getString("mac") ?: ""
-            // ✅ PASS THE NAVCONTROLLER HERE
-            DeviceDetailScreen(
-                mac = mac,
-                navController = nav
-            )
+        // ✅ FIXED: DeviceDetailScreen gets "mac" automatically via ViewModel's SavedStateHandle
+        composable("device/{mac}") {
+            DeviceDetailScreen()
         }
 
         composable("sites") {

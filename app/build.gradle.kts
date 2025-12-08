@@ -53,7 +53,10 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 }
-
+kapt {
+    correctErrorTypes = true
+    includeCompileClasspath = false
+}
 
 dependencies {
 
@@ -95,7 +98,21 @@ dependencies {
     // Kotlin Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // ✅ ADD THESE 3 LINES FOR RETROFIT (NETWORKING)
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.10.0") // For debugging
+
     // Accompanist - System bar control & Permissions
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.36.0")
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
+
+
+    // ✅ ADD THESE TWO LINES TO FIX THE BUILD ERROR
+    testImplementation("com.google.dagger:hilt-android-testing:2.51.1")
+    kaptTest("com.google.dagger:hilt-compiler:2.51.1")
+
+    // ✅ ADD THESE TWO LINES TO FIX THE NEW BUILD ERROR
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.51.1")
+    kaptAndroidTest("com.google.dagger:hilt-compiler:2.51.1")
 }

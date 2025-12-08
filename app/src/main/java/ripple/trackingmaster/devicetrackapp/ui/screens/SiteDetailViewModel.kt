@@ -1,87 +1,65 @@
-//package ripple.trackingmaster.devicetrackapp.ui.screens
-//
-//import androidx.lifecycle.ViewModel
-//import androidx.lifecycle.viewModelScope
-//import dagger.hilt.android.lifecycle.HiltViewModel
-//import kotlinx.coroutines.flow.MutableStateFlow
-//import kotlinx.coroutines.flow.asStateFlow
-//import kotlinx.coroutines.launch
-//import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceEntity
-//import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
-//import ripple.trackingmaster.devicetrackapp.data.repo.SiteRepository
-//import javax.inject.Inject
-//
-//@HiltViewModel
-//class SiteDetailViewModel @Inject constructor(
-//    private val repo: SiteRepository
-//) : ViewModel() {
-//
-//    private val _site = MutableStateFlow<SiteEntity?>(null)
-//    val site = _site.asStateFlow()
-//
-//    private val _devices = MutableStateFlow<List<DeviceEntity>>(emptyList())
-//    val devices = _devices.asStateFlow()
-//
-//    fun load(siteId: Int) {
-//        viewModelScope.launch {
-//            _site.value = repo.getSiteById(siteId)
-//            // Keep collecting devices for this site
-//            repo.observeDevicesForSite(siteId).collect { list ->
-//                _devices.value = list
-//            }
-//        }
-//    }
-//}
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import ripple.trackingmaster.devicetrackapp.data.local.entity.DeviceEntity
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow // Make sure 'flow' is imported
+import kotlinx.coroutines.flow.stateIn
 import ripple.trackingmaster.devicetrackapp.data.local.entity.SiteEntity
+import ripple.trackingmaster.devicetrackapp.data.remote.dto.BeltApiResponse
+import ripple.trackingmaster.devicetrackapp.data.repo.NetworkBeltRepository
 import ripple.trackingmaster.devicetrackapp.data.repo.SiteRepository
 import javax.inject.Inject
 
 data class SiteDetailUiState(
     val site: SiteEntity? = null,
-    val devices: List<DeviceEntity> = emptyList(),
-    val isLoading: Boolean = true
+    val assignedBelts: List<BeltApiResponse> = emptyList()
 )
 
 @HiltViewModel
 class SiteDetailViewModel @Inject constructor(
-    private val repo: SiteRepository
+    private val siteRepository: SiteRepository,
+    private val beltRepository: NetworkBeltRepository,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SiteDetailUiState())
-    val uiState: StateFlow<SiteDetailUiState> = _uiState.asStateFlow()
+    // --- ▼▼▼ THIS IS THE FIX ▼▼▼ ---
+    // We must get the ID as a String and then convert it to an Int.
+    private val siteId: Int = savedStateHandle.get<String>("id")?.toIntOrNull() ?: 0
+    // --- ▲▲▲ THIS IS THE FIX ▲▲▲ ---
 
-    fun load(siteId: Int) {
-        viewModelScope.launch {
+    // Get the flow of all belts
+    private val allBeltsFlow = beltRepository.belts
 
-            // 1) Load site info
-            val site = repo.getSiteById(siteId)
+    // Get the specific site
+    private val siteFlow = flow { emit(siteRepository.getSiteById(siteId)) }
 
-            // 2) Observe devices assigned to site
-            val deviceFlow = repo.observeDevicesForSite(siteId)
+    // Combine them to create the UI state
+    val uiState: StateFlow<SiteDetailUiState> = combine(
+        siteFlow,
+        allBeltsFlow
+    ) { site, allBelts ->
+        // Find the site name
+        val siteName = site?.siteName ?: ""
 
-            deviceFlow.collect { list ->
-                _uiState.update {
-                    it.copy(
-                        site = site,
-                        devices = list,
-                        isLoading = false
-                    )
-                }
-            }
+        // Filter the list of all belts to find ones assigned to this site
+        val assignedBelts = allBelts.filter {
+            it.assignedTo.equals(siteName, ignoreCase = true)
         }
-    }
 
-    fun unassign(mac: String) {
-        viewModelScope.launch {
-            repo.unassignDevice(mac)
-        }
+        SiteDetailUiState(site, assignedBelts)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SiteDetailUiState()
+    )
+
+    init {
+        // Make sure we have the latest data
+        beltRepository.refreshBelts()
     }
 }

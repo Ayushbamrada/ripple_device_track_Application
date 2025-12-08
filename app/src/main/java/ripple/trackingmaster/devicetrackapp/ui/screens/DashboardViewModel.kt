@@ -1,75 +1,45 @@
-//package ripple.trackingmaster.devicetrackapp.ui.screens
-//
-//import androidx.lifecycle.ViewModel
-//import dagger.hilt.android.lifecycle.HiltViewModel
-//import kotlinx.coroutines.flow.*
-//import ripple.trackingmaster.devicetrackapp.data.repo.DeviceRepository
-//import javax.inject.Inject
-//
-//data class DashboardStats(
-//    val totalDevices: Int = 0
-//)
-//
-//@HiltViewModel
-//class DashboardViewModel @Inject constructor(
-//    private val repo: DeviceRepository
-//) : ViewModel() {
-//
-//    val stats: StateFlow<DashboardStats> =
-//        repo.observeDevices().map { devices ->
-//            DashboardStats(
-//                totalDevices = devices.size
-//            )
-//        }.stateIn(
-//            started = SharingStarted.WhileSubscribed(5000),
-//            scope = kotlinx.coroutines.GlobalScope,
-//            initialValue = DashboardStats()
-//        )
-//}
 package ripple.trackingmaster.devicetrackapp.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import ripple.trackingmaster.devicetrackapp.data.repo.DeviceRepository
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import ripple.trackingmaster.devicetrackapp.data.repo.NetworkBeltRepository
 import ripple.trackingmaster.devicetrackapp.data.repo.SiteRepository
 import javax.inject.Inject
 
-data class DashboardStats(
-    val totalDevices: Int = 0,
-    val assignedDevices: Int = 0, // If you add assignment count later, we’ll compute it here
-    val totalSites: Int = 0
+// This is the new state for the Dashboard UI
+data class DashboardUiState(
+    val deviceCount: Int = 0,
+    val siteCount: Int = 0
 )
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val deviceRepo: DeviceRepository,
-    private val siteRepo: SiteRepository
+    private val beltRepository: NetworkBeltRepository, // ✅ USE NEW REPO
+    private val siteRepository: SiteRepository         // ✅ USE NEW REPO
 ) : ViewModel() {
 
-    private val _stats = MutableStateFlow(DashboardStats())
-    val stats: StateFlow<DashboardStats> = _stats.asStateFlow()
+    // Combine the flows from both repositories to create the UI state
+    val uiState: StateFlow<DashboardUiState> = combine(
+        beltRepository.belts,
+        siteRepository.observeSites()
+    ) { belts, sites ->
+        DashboardUiState(
+            deviceCount = belts.size,
+            siteCount = sites.size
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = DashboardUiState() // Start with 0 counts
+    )
 
     init {
-        observeStats()
-    }
-
-    private fun observeStats() {
-        // We only use data that exists in your current schema:
-        // - deviceRepo.observeDevices() -> list of DeviceEntity
-        // - siteRepo.observeSites()     -> list of SiteEntity
-        // You don't have per-device assignment field exposed, so assignedDevices = 0 for now.
-        combine(
-            deviceRepo.observeDevices(),
-            siteRepo.observeSites()
-        ) { devices, sites ->
-            DashboardStats(
-                totalDevices = devices.size,
-                assignedDevices = 0,     // update later if you expose assignment info
-                totalSites = sites.size
-            )
-        }.onEach { _stats.value = it }
-            .launchIn(viewModelScope)
+        // Refresh the belt list when the app starts
+        beltRepository.refreshBelts()
     }
 }
